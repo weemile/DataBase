@@ -1,4 +1,134 @@
+USE [权限实验];
+SET NOCOUNT ON;
+
 -- =========================================
+-- 第 0 部分：准备（避免非工作时段触发器阻塞插入）
+-- =========================================
+IF EXISTS (SELECT 1 FROM sys.triggers WHERE name = 'trg_PreventAfterHoursChanges')
+    DISABLE TRIGGER trg_PreventAfterHoursChanges ON dbo.[User];
+
+-- =========================================
+-- 第 1 部分：清空表数据（按外键从子到父）
+-- =========================================
+DELETE FROM dbo.Product_Promotion;
+DELETE FROM dbo.Payment;
+DELETE FROM dbo.OrderItem;
+DELETE FROM dbo.[Order];
+DELETE FROM dbo.Cart;
+DELETE FROM dbo.Address;
+DELETE FROM dbo.Promotion;
+DELETE FROM dbo.Product;
+DELETE FROM dbo.Category;
+DELETE FROM dbo.[User];
+
+-- =========================================
+-- 第 2 部分：插入基础数据（用户、分类、商品、促销）
+-- =========================================
+
+-- 2.1 用户（满足检查：phone 11 位数字，email 合法，password 长度 >= 6）
+INSERT INTO dbo.[User] (user_id, username, password, phone, email, register_time, user_type)
+VALUES
+    (1, 'alice',   'passw0rd', '13800000001', 'alice@example.com',   GETDATE(), 0),
+    (2, 'bob',     'passw0rd', '13800000002', 'bob@example.com',     GETDATE(), 0),
+    (3, 'charlie', 'passw0rd', '13800000003', 'charlie@example.com', GETDATE(), 1);
+
+-- 2.2 分类（Cat_category_id/parent_id 指向父级，根类置 NULL）
+INSERT INTO dbo.Category (category_id, Cat_category_id, category_name, parent_id, sort_order, status)
+VALUES
+    (10, NULL, 'Electronics', NULL, 1, 1),
+    (11, 10,   'Phones',      10,   2, 1),
+    (12, 10,   'Laptops',     10,   3, 1);
+
+-- 2.3 商品（库存充足避免触发库存不足；product_status=1 上架）
+INSERT INTO dbo.Product (product_id, category_id, product_name, description, price, stock_quantity, image, product_status)
+VALUES
+    (100, 11, 'Alpha Phone',    'Flagship phone',       3999.00, 200, 'alpha_phone.jpg',    1),
+    (101, 12, 'Bravo Laptop',   'Lightweight laptop',   6999.00, 150, 'bravo_laptop.jpg',   1),
+    (102, 11, 'Charlie Earbuds','Wireless earbuds',      599.00, 500, 'charlie_buds.jpg',   1);
+
+-- 2.4 促销与商品关联（discount_tyoe: 1=折扣率，2=减金额）
+INSERT INTO dbo.Promotion (promotion_id, promotion_name, start_time, end_time, discount_tyoe, discount_value, promotion_status, promotion_description)
+VALUES
+    (500, N'Summer Sale 10% Off', DATEADD(DAY,-1,GETDATE()), DATEADD(DAY,14,GETDATE()), 1, 0.90, 1, N'全场九折示例促销');
+
+INSERT INTO dbo.Product_Promotion (product_id, promotion_id)
+VALUES (101, 500);
+
+-- 2.5 地址（每用户 1 条默认地址）
+INSERT INTO dbo.Address (address_id, user_id, receiver_name, receiver_phone, detail_address, postal_code, is_default)
+VALUES
+    (1001, 1, 'Alice',   '13800000001', '1st Ave 100',  '100000', 1),
+    (1002, 2, 'Bob',     '13800000002', '2nd Blvd 200', '200000', 1),
+    (1003, 3, 'Charlie', '13800000003', '3rd Rd 300',   '300000', 1);
+
+-- =========================================
+-- 第 3 部分：插入业务数据（购物车、订单、明细、支付）
+-- =========================================
+
+-- 3.1 购物车（INSTEAD OF INSERT 需提供 cart_id，且库存充足）
+INSERT INTO dbo.Cart (cart_id, product_id, user_id, cart_quantity, add_time)
+VALUES
+    (9001, 102, 2, 2, DATEADD(MINUTE,-30,GETDATE())),
+    (9002, 101, 2, 1, DATEADD(MINUTE,-20,GETDATE()));
+
+-- 3.2 订单（order_status：0 待支付，1 已支付，2 已发货，3 已完成）
+INSERT INTO dbo.[Order] (order_id, user_id, address_id, total_amount, create_time, pay_time, ship_time, order_status)
+VALUES
+    (7001, 1, 1001, 0, DATEADD(DAY,-5,GETDATE()), DATEADD(DAY,-5,GETDATE()), DATEADD(DAY,-4,GETDATE()), 3),
+    (7002, 2, 1002, 0, DATEADD(DAY,-2,GETDATE()), DATEADD(DAY,-2,GETDATE()), NULL,                         1),
+    (7003, 3, 1003, 0, DATEADD(DAY,-1,GETDATE()), NULL,                      NULL,                         0);
+
+-- 3.3 订单明细（触发器自动维护 subtotal、订单总额、库存扣减）
+INSERT INTO dbo.OrderItem (item_id, order_id, product_id, order_quantity, unit_price, subtotal)
+VALUES
+    (8001, 7001, 101, 1, 6999.00, 6999.00),
+    (8002, 7001, 102, 2,  599.00, 1198.00),
+    (8003, 7002, 100, 1, 3999.00, 3999.00),
+    (8004, 7003, 102, 1,  599.00,  599.00);
+
+-- 3.4 支付记录（payment_status：0 未支付，1 已支付）
+INSERT INTO dbo.Payment (payment_id, order_id, payment_method, payment_amount, payment_status, payment_time, transaction_id)
+VALUES
+    (6001, 7001, 'WeChat Pay', 8197.00, 1, DATEADD(DAY,-5,GETDATE()), 'TXN-7001'),
+    (6002, 7002, 'Alipay',     3999.00, 1, DATEADD(DAY,-2,GETDATE()), 'TXN-7002');
+
+-- =========================================
+-- 第 4 部分：验证查询（只读）
+-- =========================================
+
+-- 4.1 某用户购物车明细（Bob）
+SELECT * FROM dbo.vw_CartDetails WHERE username = 'bob';
+
+-- 4.2 订单全量信息示例（Alice 已完成订单）
+SELECT o.order_id, o.order_status, o.create_time, o.pay_time, o.ship_time, o.total_amount,
+       oi.item_id, oi.product_id, oi.order_quantity, oi.unit_price, oi.subtotal,
+       p.payment_id, p.payment_method, p.payment_amount, p.payment_status, p.payment_time
+FROM dbo.[Order] o
+LEFT JOIN dbo.OrderItem oi ON o.order_id = oi.order_id
+LEFT JOIN dbo.Payment p    ON o.order_id = p.order_id
+WHERE o.order_id = 7001;
+
+-- 4.3 热销商品 / 分类销量示例视图
+SELECT TOP 10 * FROM dbo.vw_TopSellingProducts ORDER BY sales_rank;
+
+-- 4.4 用户订单统计
+SELECT * FROM dbo.vw_UserOrderStatistics;
+
+-- 4.5 当前有效促销商品
+SELECT * FROM dbo.vw_PromotionProducts;
+
+-- 4.6 日销售汇总
+SELECT * FROM dbo.vw_DailySales ORDER BY sale_date DESC;
+
+-- 4.7 库存状态
+SELECT * FROM dbo.vw_InventoryStatus;
+
+-- =========================================
+-- 第 5 部分：收尾（恢复触发器）
+-- =========================================
+IF EXISTS (SELECT 1 FROM sys.triggers WHERE name = 'trg_PreventAfterHoursChanges')
+    ENABLE TRIGGER trg_PreventAfterHoursChanges ON dbo.[User];
+GO-- =========================================
 -- data.sql 演示数据与查询脚本
 -- 依赖已执行的 schema + 触发器 + 视图
 -- =========================================

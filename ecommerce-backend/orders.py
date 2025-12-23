@@ -24,11 +24,10 @@ async def get_orders(
         # 查询订单列表
         orders = db.execute_query("""
             SELECT   
-                o.order_id, o.order_no, o.user_id, o.address_id,  
-                o.total_amount, o.discount_amount, o.shipping_fee, o.final_amount,  
-                o.payment_method, o.order_status, o.create_time, o.pay_time,  
-                o.ship_time, o.receive_time, o.cancel_time, o.cancel_reason, o.remark,  
-                a.receiver_name, a.receiver_phone, a.province, a.city, a.district, a.detail_address,  
+                o.order_id, o.user_id, o.address_id,  
+                o.total_amount, o.order_status, o.create_time, o.pay_time,  
+                o.ship_time,
+                a.receiver_name, a.receiver_phone, a.detail_address,
                 (SELECT COUNT(*) FROM OrderItem WHERE order_id = o.order_id) AS item_count  
             FROM [Order] o  
             LEFT JOIN Address a ON o.address_id = a.address_id  
@@ -74,27 +73,15 @@ async def create_order(
 ):
     """创建订单"""
     try:
-        # 将cart_ids列表转换为JSON字符串
-        import json
-        cart_ids_json = json.dumps(order_data.cart_ids)
-        
         print("=== 创建订单调试信息 ===")
         print(f"用户ID: {current_user['user_id']}")
         print(f"地址ID: {order_data.address_id}")
-        print(f"购物车IDs: {order_data.cart_ids}")
-        print(f"购物车JSON: {cart_ids_json}")
-        print(f"运费: {order_data.shipping_fee}")
-        print(f"备注: {order_data.remark}")
-        
-        # 调用存储过程
-        result = db.execute_proc("USP_CreateOrder", [
+
+        # 调用 test.sql 的存储过程 sp_CreateOrder(user_id, address_id, @order_id OUTPUT)
+        result = db.execute_proc("sp_CreateOrder", [
             current_user["user_id"],
             order_data.address_id,
-            cart_ids_json,
-            order_data.shipping_fee,
-            order_data.remark or "",
-            "",  # @order_no (output placeholder)
-            0    # @order_id (output placeholder)
+            0  # 输出参数占位
         ])
         
         print(f"存储过程返回: {result}")
@@ -133,8 +120,8 @@ async def pay_order(
 ):
     """支付订单"""
     try:
-        # 调用存储过程
-        result = db.execute_proc("USP_PayOrder", [
+        # 调用存储过程 sp_PayOrder(order_id, payment_method, transaction_id)
+        result = db.execute_proc("sp_PayOrder", [
             order_id,
             payment_method,
             transaction_id or ""
@@ -182,9 +169,9 @@ async def get_order_detail(
         
         # 获取订单基本信息
         order_sql = """
-            SELECT o.*, 
-                   a.receiver_name, a.receiver_phone,
-                   a.province, a.city, a.district, a.detail_address
+            SELECT o.order_id, o.user_id, o.address_id, o.total_amount,
+                   o.create_time, o.pay_time, o.ship_time, o.order_status,
+                   a.receiver_name, a.receiver_phone, a.detail_address
             FROM [Order] o
             LEFT JOIN Address a ON o.address_id = a.address_id
             WHERE o.order_id = ?
@@ -196,7 +183,8 @@ async def get_order_detail(
         
         # 获取订单商品
         items_sql = """
-            SELECT oi.*, p.image_url
+            SELECT oi.item_id, oi.order_id, oi.product_id, oi.order_quantity, oi.unit_price, oi.subtotal,
+                   p.image AS image, p.product_name
             FROM OrderItem oi
             LEFT JOIN Product p ON oi.product_id = p.product_id
             WHERE oi.order_id = ?
@@ -205,7 +193,8 @@ async def get_order_detail(
         
         # 获取支付信息
         payment_sql = """
-            SELECT * FROM Payment WHERE order_id = ? ORDER BY create_time DESC
+            SELECT payment_id, order_id, payment_method, payment_amount, payment_status, payment_time, transaction_id
+            FROM Payment WHERE order_id = ? ORDER BY payment_time DESC
         """
         payments = db.execute_query(payment_sql, (order_id,))
         

@@ -1,23 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-
-from database import db
-from models import CartItem
-from auth import get_current_user
-
-router = APIRouter(prefix="/cart", tags=["购物车"])
-
-@router.get("/")
-async def get_cart(current_user: dict = Depends(get_current_user)):
-    """获取购物车列表"""
-    try:
-        # 改为直接SQL查询，避免存储过程问题
-        items = db.execute_query("""
             SELECT 
                 c.cart_id,
                 c.user_id,
                 c.product_id,
-                c.quantity,
+                c.cart_quantity,
+                c.add_time,
+                p.product_name,
+                p.price,
+                p.image AS image,
+                p.stock_quantity,
+                p.product_status
+            FROM Cart c
+            INNER JOIN Product p ON c.product_id = p.product_id
+            WHERE c.user_id = ?
+            AND p.product_status = 1
+            ORDER BY c.add_time DESC
                 c.selected,
                 c.create_time,
                 c.update_time,
@@ -35,13 +33,20 @@ async def get_cart(current_user: dict = Depends(get_current_user)):
         
         # 计算统计信息
         total_items = len(items)
-        cart_total = sum(item["price"] * item["quantity"] for item in items) if items else 0
+        cart_total = sum(item["price"] * item["cart_quantity"] for item in items) if items else 0
         
         return {
             "code": 200,
             "message": "success",
             "data": {
-                "items": items,
+                "items": [
+                    {
+                        **item,
+                        "quantity": item["cart_quantity"],
+                        "selected": True  # schema 无 selected 字段，前端默认选中
+                    }
+                    for item in items
+                ],
                 "summary": {
                     "total_items": total_items,
                     "total_amount": cart_total
@@ -143,7 +148,7 @@ async def update_cart_item(
         
         # 更新数量
         db.execute_update(
-            "UPDATE Cart SET quantity = ?, update_time = GETDATE() WHERE user_id = ? AND product_id = ?",
+            "UPDATE Cart SET cart_quantity = ? WHERE user_id = ? AND product_id = ?",
             (item.quantity, current_user["user_id"], product_id)
         )
         

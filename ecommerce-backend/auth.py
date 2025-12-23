@@ -99,10 +99,7 @@ async def login(user_data: UserLogin):
         print("✅ 密码验证成功")
         
         # 3. 更新最后登录时间
-        db.execute_update(
-            "UPDATE [User] SET last_login_time = GETDATE() WHERE user_id = ?",
-            (user["user_id"],)
-        )
+        # test.sql 中无 last_login_time 列，移除更新
         
         # 4. 创建token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

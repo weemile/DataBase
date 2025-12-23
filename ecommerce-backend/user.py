@@ -13,9 +13,6 @@ router = APIRouter(prefix="/user", tags=["用户管理"])
 class AddressBase(BaseModel):
     receiver_name: str
     receiver_phone: str
-    province: str
-    city: str
-    district: str
     detail_address: str
     postal_code: Optional[str] = None
     is_default: bool = False
@@ -30,8 +27,6 @@ class AddressResponse(AddressBase):
     address_id: int
     user_id: int
     is_default: int  # 返回0/1
-    create_time: datetime
-    update_time: Optional[datetime]
     
     class Config:
         from_attributes = True
@@ -47,7 +42,7 @@ async def get_addresses(current_user: dict = Depends(get_current_user)):
         
         # 查询地址
         addresses = db.execute_query(
-            "SELECT * FROM Address WHERE user_id = ? ORDER BY is_default DESC, create_time DESC",
+            "SELECT * FROM Address WHERE user_id = ? ORDER BY is_default DESC, address_id DESC",
             (user_id,)
         )
         
@@ -92,18 +87,14 @@ async def create_address(
         # 插入新地址
         sql = """
         INSERT INTO Address 
-        (user_id, receiver_name, receiver_phone, province, city, district, 
-         detail_address, postal_code, is_default, create_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+        (user_id, receiver_name, receiver_phone, detail_address, postal_code, is_default)
+        VALUES (?, ?, ?, ?, ?, ?)
         """
         
         params = (
             user_id,
             address_data.receiver_name,
             address_data.receiver_phone,
-            address_data.province,
-            address_data.city,
-            address_data.district,
             address_data.detail_address,
             address_data.postal_code,
             is_default_int
@@ -113,7 +104,7 @@ async def create_address(
         
         # 获取新插入的地址ID
         new_address = db.execute_query(
-            "SELECT TOP 1 * FROM Address WHERE user_id = ? ORDER BY create_time DESC",
+            "SELECT TOP 1 * FROM Address WHERE user_id = ? ORDER BY address_id DESC",
             (user_id,)
         )
         
@@ -176,22 +167,15 @@ async def update_address(
         UPDATE Address SET
             receiver_name = ?,
             receiver_phone = ?,
-            province = ?,
-            city = ?,
-            district = ?,
             detail_address = ?,
             postal_code = ?,
-            is_default = ?,
-            update_time = GETDATE()
+            is_default = ?
         WHERE address_id = ? AND user_id = ?
         """
         
         params = (
             address_data.receiver_name,
             address_data.receiver_phone,
-            address_data.province,
-            address_data.city,
-            address_data.district,
             address_data.detail_address,
             address_data.postal_code,
             is_default_int,
