@@ -74,8 +74,13 @@ export const useCartStore = defineStore('cart', () => {
 
   // 添加商品到购物车
   const addToCart = async (product, quantity = 1) => {
+    console.log('📦 cartStore.addToCart 被调用:', {
+      product,
+      quantity
+    });
+    
     try {
-      const response = await cartApi.addToCart(product.product_id, quantity)
+      const response = await cartApi.addToCart(product, quantity)
       
       if (response.data.code === 200) {
         // 添加成功后，重新获取购物车数据
@@ -189,9 +194,13 @@ export const useCartStore = defineStore('cart', () => {
     try {
       const selectedIds = selectedItems.value.map(item => item.product_id)
       
-      // 批量删除选中的商品
-      const promises = selectedIds.map(id => cartApi.removeFromCart(id))
-      await Promise.all(promises)
+      if (selectedIds.length === 0) {
+        ElMessage.warning('没有选中的商品')
+        return false
+      }
+      
+      // 使用批量删除API
+      await cartApi.batchRemoveFromCart(selectedIds)
       
       await fetchCart() // 更新本地数据
       return true

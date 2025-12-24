@@ -1,5 +1,13 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List, Generic, TypeVar
+
+# 通用响应模型
+T = TypeVar('T')
+
+class APIResponse(BaseModel, Generic[T]):
+    code: int = Field(default=200, description="响应状态码")
+    message: str = Field(default="success", description="响应消息")
+    data: Optional[T] = Field(default=None, description="响应数据")
 
 class Token(BaseModel):
     access_token: str

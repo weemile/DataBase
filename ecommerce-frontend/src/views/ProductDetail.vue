@@ -454,24 +454,25 @@ const addToCart = () => {
   ElMessage.success(`已添加 ${product.value.name} 到购物车`)
 }
 
-const buyNow = () => {
+const buyNow = async () => {
   if (product.value.stock <= 0) {
     ElMessage.warning('商品已售罄')
     return
   }
   
-  // 转换为cartStore期望的格式
-  const cartProduct = {
-    product_id: product.value.id,
-    product_name: product.value.name,
-    // 使用促销价（如果有）否则使用原价
-    price: product.value.has_discount ? product.value.discounted_price : product.value.price,
-    image_url: product.value.images[0] || '',
-    stock_quantity: product.value.stock
-  }
+  console.log('🔍 开始立即购买流程')
+  console.log('📦 product.value:', product.value)
+  console.log('🔢 quantity.value:', quantity.value)
   
-  cartStore.addToCart(cartProduct, quantity.value)
-  router.push('/checkout')
+  try {
+    const success = await cartStore.addToCart(product.value.id, quantity.value)
+    console.log('✅ addToCart返回结果:', success)
+    if (success) {
+      router.push('/checkout')
+    }
+  } catch (error) {
+    console.error('❌ 立即购买失败:', error)
+  }
 }
 
 const toggleFavorite = () => {

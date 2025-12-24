@@ -9,6 +9,9 @@ export const userApi = {
   // 更新用户信息
   updateProfile: (userData) => api.put('/auth/profile', userData),
   
+  // 修改密码
+  changePassword: (passwordData) => api.put('/auth/password', passwordData),
+  
   // ==================== 地址管理 ====================
   // 获取地址列表
   getAddresses: () => api.get('/user/addresses'),

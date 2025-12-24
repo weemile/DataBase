@@ -292,7 +292,7 @@ import {
 } from '@element-plus/icons-vue'
 
 // 导入API
-import { createOrder } from '@/api/orders'
+import { createOrder, payOrder } from '@/api/orders'
 import userApi from '@/api/user'
 
 const router = useRouter()
@@ -591,11 +591,6 @@ const submitOrder = async () => {
       if (response.data.code === 200) {
         console.log('订单创建成功')
         
-        // 关闭loading提示
-        if (loadingMessage && typeof loadingMessage.close === 'function') {
-          loadingMessage.close()
-        }
-        
         // 设置订单信息（包含金额）
         const orderData = response.data.data
         orderInfo.value = {
@@ -607,13 +602,62 @@ const submitOrder = async () => {
         console.log('订单号:', orderInfo.value.order_no)
         console.log('订单金额:', orderInfo.value.amount)
         
-        // 不需要清空购物车，因为存储过程已经做了
-        // cartStore.removeSelectedItems()  // 注释掉这行
-        
-        // 跳转到完成页面
-        nextStep()
-        
-        ElMessage.success('订单创建成功！')
+        try {
+          // 订单创建成功后，立即调用支付接口
+          console.log('开始调用支付接口...')
+          
+          // 更新loading提示
+          if (loadingMessage && typeof loadingMessage.close === 'function') {
+            loadingMessage.close()
+          }
+          
+          loadingMessage = ElMessage({
+            message: '正在处理支付...',
+            type: 'info',
+            duration: 0 // 不自动关闭
+          })
+          
+          const payResponse = await payOrder(orderInfo.value.order_id)
+          console.log('支付接口响应:', payResponse)
+          
+          if (payResponse.data && payResponse.data.code === 200) {
+            console.log('支付成功')
+            
+            // 关闭loading提示
+            if (loadingMessage && typeof loadingMessage.close === 'function') {
+              loadingMessage.close()
+            }
+            
+            // 跳转到完成页面
+            nextStep()
+            
+            ElMessage.success('支付成功！')
+          } else {
+            console.log('支付失败', payResponse.data?.message)
+            
+            // 关闭loading提示
+            if (loadingMessage && typeof loadingMessage.close === 'function') {
+              loadingMessage.close()
+            }
+            
+            ElMessage.error('支付失败：' + (payResponse.data?.message || '请稍后重试'))
+            
+            // 跳转到订单详情页面，让用户可以重新支付
+            router.push(`/orders/${orderInfo.value.order_id}`)
+          }
+        } catch (payError) {
+          console.error('支付过程中出错:', payError)
+          
+          // 关闭loading提示
+          if (loadingMessage && typeof loadingMessage.close === 'function') {
+            loadingMessage.close()
+          }
+          
+          ElMessage.error('支付失败，请稍后重试')
+          
+          // 跳转到订单详情页面，让用户可以重新支付
+          router.push(`/orders/${orderInfo.value.order_id}`)
+        }
       } else {
         console.log('订单创建失败，响应码:', response.data.code)
         console.log('错误信息:', response.data.message)

@@ -309,10 +309,7 @@ const clearSelectedItems = () => {
     cancelButtonText: '取消',
     type: 'warning'
   }).then(() => {
-    selectedItems.value.forEach(item => {
-      cartStore.removeFromCart(item.product_id)
-    })
-    ElMessage.success('删除成功')
+    cartStore.removeSelectedItems()
   }).catch(() => {})
 }
 

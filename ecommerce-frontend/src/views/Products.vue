@@ -300,17 +300,17 @@ const fetchProducts = async () => {
       
       // 转换数据格式
       products.value = response.data.data.items.map(product => ({
-        id: product.product_id,
-        name: product.product_name,
+        id: product.id,
+        name: product.name,
         description: product.description,
         price: product.price,
-        originalPrice: null,
-        image: '', // 暂时空着
-        category: product.category_id, // 使用真实的后端category_id
-        stock: product.stock_quantity,
+        originalPrice: product.original_price,  // 使用后端返回的原价
+        image: product.image || '',
+        category: product.category,
+        stock: product.stock,
         sales: product.sold_quantity,
         rating: 4.5,
-        promotion: null
+        promotion: product.promotion  // 使用后端返回的促销信息
       }))
     }
   } catch (error) {

@@ -14,7 +14,7 @@ class Database:
             try:
                 # Windows身份验证的连接字符串
                 server = os.getenv("DB_SERVER", ".")
-                database = os.getenv("DB_NAME", "ECommerceDB")
+                database = os.getenv("DB_NAME", "权限实验")
                 
                 # 使用Windows身份验证
                 connection_string = f"""
@@ -80,6 +80,25 @@ class Database:
                     results.append(dict(zip(columns, row)))
                 return results
             return []
+        except Exception as e:
+            print(f"查询失败: {e}")
+            raise e
+        finally:
+            cursor.close()
+    
+    def fetch_one(self, sql, params=None):
+        '''执行查询并返回第一条记录'''
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(sql, params or ())
+            
+            if cursor.description:
+                columns = [column[0] for column in cursor.description]
+                row = cursor.fetchone()
+                if row:
+                    return dict(zip(columns, row))
+            return None
         except Exception as e:
             print(f"查询失败: {e}")
             raise e

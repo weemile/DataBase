@@ -122,7 +122,15 @@ const formatTime = (timeStr) => {
 
 // 计算商品数量
 const getProductCount = (order) => {
-  if (!order || !order.items) return 0
+  if (!order) return 0
+  
+  // 优先使用item_count字段（后端已计算）
+  if (order.item_count !== undefined) {
+    return order.item_count
+  }
+  
+  // 如果没有item_count，则从items数组计算
+  if (!order.items) return 0
   
   if (Array.isArray(order.items)) {
     // 如果是数组，计算总数量
@@ -202,18 +210,15 @@ const payOrder = async (order) => {
   try {
     console.log('支付订单:', order.order_id)
     
-    // 模拟支付成功
-    ElMessage.success('支付成功！')
-    
-    // 这里可以调用真实API
-    // const response = await apiPayOrder(order.order_id, 'alipay')
-    // if (response.data.code === 200) {
-    //   ElMessage.success('支付成功')
-    //   loadOrders()
-    // }
-    
-    // 重新加载订单以更新状态
-    loadOrders()
+    // 调用支付API
+    const response = await apiPayOrder(order.order_id)
+    if (response.data && response.data.code === 200) {
+      ElMessage.success('支付成功！')
+      // 重新加载订单以更新状态
+      loadOrders()
+    } else {
+      ElMessage.error('支付失败: ' + (response.data?.message || '请稍后重试'))
+    }
   } catch (error) {
     console.error('支付失败:', error)
     ElMessage.error('支付失败')

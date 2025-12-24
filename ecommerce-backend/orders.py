@@ -22,38 +22,40 @@ async def get_orders(
         offset = (page - 1) * page_size
         
         # 查询订单列表
-        orders = db.execute_query("""
-            SELECT   
-                o.order_id, o.user_id, o.address_id,  
-                o.total_amount, o.order_status, o.create_time, o.pay_time,  
-                o.ship_time,
-                a.receiver_name, a.receiver_phone, a.detail_address,
-                (SELECT COUNT(*) FROM OrderItem WHERE order_id = o.order_id) AS item_count  
-            FROM [Order] o  
-            LEFT JOIN Address a ON o.address_id = a.address_id  
-            WHERE o.user_id = ?
-            ORDER BY o.create_time DESC
-            OFFSET ? ROWS
-            FETCH NEXT ? ROWS ONLY
-        """, (current_user["user_id"], offset, page_size))
+        orders = db.execute_query('SELECT o.order_id, o.user_id, o.address_id, o.total_amount, o.order_status, o.create_time, o.pay_time, o.ship_time, a.receiver_name, a.receiver_phone, a.detail_address FROM [Order] o LEFT JOIN Address a ON o.address_id = a.address_id WHERE o.user_id = ? ORDER BY o.create_time DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY', (current_user["user_id"], offset, page_size))
         
         # 查询总数
-        count_result = db.execute_query("""
-            SELECT COUNT(*) AS total_count
-            FROM [Order] o  
-            WHERE o.user_id = ?
-        """, (current_user["user_id"],))
+        count_result = db.execute_query('SELECT COUNT(*) AS total_count FROM [Order] o WHERE o.user_id = ?', (current_user["user_id"],))
         
         total_count = count_result[0]["total_count"] if count_result else 0
         
-        print(f"查询到的订单数量: {len(orders)}")
+        # 处理每个订单，添加必要的字段
+        processed_orders = []
+        for order in orders:
+            # 获取订单商品
+            items_sql = 'SELECT oi.item_id, oi.order_id, oi.product_id, oi.order_quantity AS quantity, oi.unit_price, oi.subtotal, p.image AS product_image, p.product_name FROM OrderItem oi LEFT JOIN Product p ON oi.product_id = p.product_id WHERE oi.order_id = ?'
+            items = db.execute_query(items_sql, (order["order_id"],))
+            
+            # 构建完整的订单数据
+            processed_order = {
+                **order,
+                "order_no": f"ORD{order['order_id']:08d}",  # 添加订单号
+                "shipping_fee": 0.0,  # 默认值
+                "final_amount": order["total_amount"],  # 默认值
+                "items": items,  # 添加商品列表
+                "item_count": len(items)  # 添加商品数量
+            }
+            
+            processed_orders.append(processed_order)
+        
+        print(f"查询到的订单数量: {len(processed_orders)}")
         print(f"总订单数: {total_count}")
         
         return {
             "code": 200,
             "message": "success",
             "data": {
-                "items": orders,
+                "items": processed_orders,
                 "total": total_count,
                 "page": page,
                 "page_size": page_size
@@ -76,8 +78,11 @@ async def create_order(
         print("=== 创建订单调试信息 ===")
         print(f"用户ID: {current_user['user_id']}")
         print(f"地址ID: {order_data.address_id}")
+        print(f"购物车ID列表: {order_data.cart_ids}")
+        print(f"配送费: {order_data.shipping_fee}")
+        print(f"备注: {order_data.remark}")
 
-        # 调用 test.sql 的存储过程 sp_CreateOrder(user_id, address_id, @order_id OUTPUT)
+        # 调用存储过程 sp_CreateOrder，当前存储过程只接受user_id、address_id和order_id输出参数
         result = db.execute_proc("sp_CreateOrder", [
             current_user["user_id"],
             order_data.address_id,
@@ -114,10 +119,21 @@ async def create_order(
 @router.post("/{order_id}/pay")
 async def pay_order(
     order_id: int,
-    payment_method: str,
+    payment_method: str = "Online",  # 默认在线支付
     transaction_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    # 验证订单属于当前用户
+    order_check = db.execute_query(
+        "SELECT order_id, user_id FROM [Order] WHERE order_id = ?",
+        (order_id,)
+    )
+    
+    if not order_check:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    
+    if order_check[0]["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="无权支付此订单")
     """支付订单"""
     try:
         # 调用存储过程 sp_PayOrder(order_id, payment_method, transaction_id)
@@ -199,6 +215,11 @@ async def get_order_detail(
         payments = db.execute_query(payment_sql, (order_id,))
         
         result = order_info[0]
+        # 为缺失字段添加默认值
+        result["discount_amount"] = 0.0
+        result["shipping_fee"] = 0.0
+        result["final_amount"] = result["total_amount"]
+        result["order_no"] = f"ORD{result['order_id']:08d}"  # 添加订单号
         result["items"] = items
         result["payments"] = payments
         

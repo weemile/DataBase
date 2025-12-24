@@ -6,7 +6,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from database import db
-from auth import router as auth_router
+from auth import router as auth_router, global_exception_handler
 from products import router as products_router
 from cart import router as cart_router
 from orders import router as orders_router
@@ -28,13 +28,16 @@ async def lifespan(app: FastAPI):
         print(f"✅ 数据库连接成功: {result[0]['version'][:50]}...")
         
         # 测试表是否存在
+        import os
+        db_name = os.getenv("DB_NAME", "权限实验")
         tables = db.execute_query("""
+
             SELECT TABLE_NAME 
             FROM INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_TYPE = 'BASE TABLE' 
-            AND TABLE_CATALOG = 'ECommerceDB'
+            AND TABLE_CATALOG = ?
             ORDER BY TABLE_NAME
-        """)
+        """, (db_name,))
         print(f"📁 数据库中有 {len(tables)} 张表")
         
     except Exception as e:
@@ -60,6 +63,9 @@ app = FastAPI(
     # 可以删除或保留swagger_favicon_url这一行
     # swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png"
 )
+
+# 注册全局异常处理器
+app.exception_handler(Exception)(global_exception_handler)
 
 # 配置CORS（允许前端访问）
 app.add_middleware(

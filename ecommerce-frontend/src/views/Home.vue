@@ -179,6 +179,7 @@ import {
   Medal,         // 奖牌图标 - 存在
   Headset        // 耳机图标 - 存在
 } from '@element-plus/icons-vue'
+import { getCategories } from '@/api/products'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -215,41 +216,26 @@ const carouselItems = ref([
   }
 ])
 
-// 分类数据 - 使用确认存在的图标
-const categories = ref([
-  { 
-    id: 1, 
-    name: '手机数码', 
-    icon: Iphone, 
-    color: '#409EFF', 
-    description: '智能手机/配件',
-    count: 156
-  },
-  { 
-    id: 2, 
-    name: '电脑办公', 
-    icon: Monitor, 
-    color: '#67C23A', 
-    description: '笔记本/台式机',
-    count: 89
-  },
-  { 
-    id: 3, 
-    name: '服装服饰', 
-    icon: Goods,     // 使用 Goods 代替 TShirt
-    color: '#E6A23C', 
-    description: '男女装/鞋帽',
-    count: 342
-  },
-  { 
-    id: 4, 
-    name: '家用电器', 
-    icon: Refrigerator, 
-    color: '#F56C6C', 
-    description: '空调/冰箱/电视',
-    count: 67
-  }
-])
+// 分类数据
+const categories = ref([])
+
+// 图标映射
+const categoryIcons = {
+  'Phones': Iphone,
+  'Laptops': Monitor,
+  'Electronics': Monitor,
+  // 默认使用商品图标
+  'default': Goods
+}
+
+// 颜色映射
+const categoryColors = {
+  'Phones': '#409EFF',
+  'Laptops': '#67C23A',
+  'Electronics': '#E6A23C',
+  // 默认使用蓝色
+  'default': '#409EFF'
+}
 
 // 推荐商品数据 - 清空静态数据
 const featuredProducts = ref([])
@@ -343,12 +329,12 @@ const fetchFeaturedProducts = async () => {
       console.log('商品数据:', response.data.data.items)
       
       featuredProducts.value = response.data.data.items.map(product => ({
-        id: product.product_id,
-        name: product.product_name,
+        id: product.id,
+        name: product.name,
         description: product.description,
         price: product.price,
         sales: product.sold_quantity,
-        stock: product.stock_quantity,
+        stock: product.stock,
         bgColor: getRandomColor()
       }))
       
@@ -356,6 +342,64 @@ const fetchFeaturedProducts = async () => {
     }
   } catch (error) {
     console.error('获取商品失败:', error)
+  }
+}
+
+// 获取分类数据
+const fetchCategories = async () => {
+  try {
+    console.log('开始获取分类数据...')
+    const response = await getCategories()
+    console.log('分类API响应:', response.data)
+    
+    if (response.data.code === 200) {
+      // 处理分类数据，添加图标和颜色
+      const categoryData = response.data.data
+      console.log('获取到分类数量:', categoryData.length)
+      console.log('分类数据:', categoryData)
+      
+      // 转换分类数据格式，仅使用直接子分类
+      categories.value = categoryData.map(category => {
+        // 获取图标
+        const iconName = category.category_name?.trim() || 'default'
+        const icon = categoryIcons[iconName] || categoryIcons['default']
+        
+        // 获取颜色
+        const color = categoryColors[iconName] || categoryColors['default']
+        
+        return {
+          id: category.category_id,
+          name: category.category_name?.trim() || '未知分类',
+          icon: icon,
+          color: color,
+          description: category.category_name?.trim() + '商品',
+          count: Math.floor(Math.random() * 200) + 50 // 随机生成商品数量
+        }
+      })
+      
+      console.log('转换后的分类:', categories.value)
+    }
+  } catch (error) {
+    console.error('获取分类失败:', error)
+    // 如果API调用失败，使用默认分类
+    categories.value = [
+      { 
+        id: 11, 
+        name: 'Phones', 
+        icon: Iphone, 
+        color: '#409EFF', 
+        description: '智能手机/配件',
+        count: 156
+      },
+      { 
+        id: 12, 
+        name: 'Laptops', 
+        icon: Monitor, 
+        color: '#67C23A', 
+        description: '笔记本/台式机',
+        count: 89
+      }
+    ]
   }
 }
 
@@ -368,6 +412,7 @@ const getRandomColor = () => {
 // 页面加载时获取数据
 onMounted(() => {
   fetchFeaturedProducts()
+  fetchCategories()
 })
 </script>
 

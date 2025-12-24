@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -6,7 +7,45 @@ from passlib.context import CryptContext
 from typing import Optional
 
 from database import db
-from models import UserLogin, UserRegister, Token
+from models import UserLogin, UserRegister, Token, APIResponse
+
+# 自定义业务异常类
+class BusinessException(Exception):
+    def __init__(self, code: int, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(self.message)
+
+# 全局异常处理器
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, BusinessException):
+        return JSONResponse(
+            status_code=exc.code,
+            content=APIResponse(
+                code=exc.code,
+                message=exc.message,
+                data=None
+            ).dict()
+        )
+    elif isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=APIResponse(
+                code=exc.status_code,
+                message=exc.detail,
+                data=None
+            ).dict()
+        )
+    else:
+        # 未知异常
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse(
+                code=500,
+                message=f"服务器内部错误: {str(exc)}",
+                data=None
+            ).dict()
+        )
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -249,6 +288,51 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         "message": "success",
         "data": current_user
     }
+
+@router.put("/password")
+async def change_password(
+    password_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """修改密码"""
+    try:
+        user_id = current_user["user_id"]
+        current_password = password_data.get("currentPassword")
+        new_password = password_data.get("newPassword")
+        
+        if not current_password or not new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="当前密码和新密码不能为空"
+            )
+        
+        print(f"🔒 修改用户密码: ID={user_id}")
+        
+        # 验证当前密码
+        user = db.fetch_one("SELECT password FROM [User] WHERE user_id = ?", [user_id])
+        if not user or user["password"] != current_password:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="当前密码错误"
+            )
+        
+        # 更新密码
+        db.execute_update("UPDATE [User] SET password = ? WHERE user_id = ?", [new_password, user_id])
+        
+        print(f"✅ 密码修改成功: ID={user_id}")
+        return {
+            "code": 200,
+            "message": "密码修改成功"
+        }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 修改密码异常: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"修改密码失败: {str(e)}"
+        )
 
 @router.get("/test")
 async def test_auth():

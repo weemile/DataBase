@@ -38,6 +38,18 @@ request.interceptors.response.use(
   (response) => {
     console.log(`✅ 响应成功: ${response.status} ${response.config.url}`, response.data)
     
+    // 检查响应数据格式是否符合预期
+    const responseData = response.data
+    if (responseData && typeof responseData === 'object') {
+      // 如果响应包含code字段且不为200，视为业务错误
+      if (responseData.code !== undefined && responseData.code !== 200) {
+        console.warn(`⚠️ 业务错误: ${responseData.code} - ${responseData.message}`)
+        // 显示业务错误消息
+        ElMessage.error(responseData.message || '操作失败')
+        return Promise.reject(new Error(responseData.message || '操作失败'))
+      }
+    }
+    
     // 返回完整响应，让调用处处理业务逻辑
     return response
   },
@@ -69,10 +81,25 @@ request.interceptors.response.use(
           ElMessage.error('请求的资源不存在')
           break
         case 422:
-          ElMessage.error('数据验证失败：' + (data.detail || '请检查输入'))
+          // 处理表单验证错误
+          if (data.detail && Array.isArray(data.detail)) {
+            const errorMessage = data.detail.map(err => err.msg).join('；')
+            ElMessage.error('数据验证失败：' + errorMessage)
+          } else {
+            ElMessage.error('数据验证失败：' + (data.detail || '请检查输入'))
+          }
           break
         case 500:
-          ElMessage.error(data.detail || data.message || '服务器内部错误')
+          // 生产环境下隐藏具体错误信息
+          const errorMsg = import.meta.env.DEV 
+            ? (data.detail || data.message || '服务器内部错误') 
+            : '服务器内部错误，请稍后重试'
+          ElMessage.error(errorMsg)
+          break
+        case 502:
+        case 503:
+        case 504:
+          ElMessage.error('服务器暂时不可用，请稍后重试')
           break
         default:
           ElMessage.error(`请求失败: ${status}`)

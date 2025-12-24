@@ -84,14 +84,19 @@ async def create_address(
                 (user_id,)
             )
         
+        # 生成唯一的address_id
+        max_id_result = db.execute_query("SELECT ISNULL(MAX(address_id), 0) as max_id FROM Address")
+        new_address_id = max_id_result[0]["max_id"] + 1 if max_id_result else 1
+        
         # 插入新地址
         sql = """
         INSERT INTO Address 
-        (user_id, receiver_name, receiver_phone, detail_address, postal_code, is_default)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (address_id, user_id, receiver_name, receiver_phone, detail_address, postal_code, is_default)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         
         params = (
+            new_address_id,
             user_id,
             address_data.receiver_name,
             address_data.receiver_phone,

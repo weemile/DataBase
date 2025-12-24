@@ -162,14 +162,12 @@ const payOrder = async () => {
     }).then(async () => {
       const response = await apiPayOrder(order.value.order_id)
       
-      if (response.data.code === 200) {
+      if (response.data && response.data.code === 200) {
         ElMessage.success('支付成功')
-        // 刷新订单详情
+        // 刷新订单详情，让用户在详情页查看支付结果
         await fetchOrderDetail()
-        // 跳转到订单列表
-        router.push('/orders')
       } else {
-        ElMessage.error(response.data.message || '支付失败')
+        ElMessage.error(response.data?.message || '支付失败')
       }
     })
   } catch (error) {

@@ -1,14 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from typing import List
+from pydantic import BaseModel
+from database import db
+from auth import get_current_user
+
+router = APIRouter(prefix="/cart")
+
+class CartItem(BaseModel):
+    product_id: int
+    quantity: int
+
+@router.get("/")
+@router.get("")
+async def get_cart(current_user: dict = Depends(get_current_user)):
+    """获取购物车列表"""
+    try:
+        sql = """
             SELECT 
-                c.cart_id,
-                c.user_id,
-                c.product_id,
-                c.cart_quantity,
+                c.cart_id, 
+                c.user_id, 
+                c.product_id, 
+                c.cart_quantity, 
                 c.add_time,
                 p.product_name,
                 p.price,
-                p.image AS image,
+                p.image AS image_url,
                 p.stock_quantity,
                 p.product_status
             FROM Cart c
@@ -16,20 +32,8 @@ from typing import List
             WHERE c.user_id = ?
             AND p.product_status = 1
             ORDER BY c.add_time DESC
-                c.selected,
-                c.create_time,
-                c.update_time,
-                p.product_name,
-                p.price,
-                p.image_url,
-                p.stock_quantity,
-                p.product_status
-            FROM Cart c
-            INNER JOIN Product p ON c.product_id = p.product_id
-            WHERE c.user_id = ?
-            AND p.product_status = 1
-            ORDER BY c.create_time DESC
-        """, (current_user["user_id"],))
+        """
+        items = db.execute_query(sql, (current_user["user_id"],))
         
         # 计算统计信息
         total_items = len(items)
@@ -43,7 +47,7 @@ from typing import List
                     {
                         **item,
                         "quantity": item["cart_quantity"],
-                        "selected": True  # schema 无 selected 字段，前端默认选中
+                        "selected": True  # 默认选中
                     }
                     for item in items
                 ],
@@ -59,11 +63,14 @@ from typing import List
             status_code=500,
             detail=f"获取购物车失败: {str(e)}"
         )
+
 @router.post("/add")
 async def add_to_cart(
     item: CartItem,
     current_user: dict = Depends(get_current_user)
 ):
+    # Add debug log to see what's being received
+    print(f"Debug: Received add_to_cart request with item: {item}")
     """添加商品到购物车"""
     try:
         # 调用存储过程
@@ -163,6 +170,36 @@ async def update_cart_item(
         raise HTTPException(
             status_code=500,
             detail=f"更新购物车失败: {str(e)}"
+        )
+
+@router.delete("/batch")
+async def batch_remove_from_cart(
+    product_ids: List[int] = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """批量删除购物车商品"""
+    try:
+        if not product_ids:
+            raise HTTPException(status_code=400, detail="请选择要删除的商品")
+        
+        # 使用参数化查询批量删除
+        placeholders = ",".join(["?"] * len(product_ids))
+        sql = f"DELETE FROM Cart WHERE user_id = ? AND product_id IN ({placeholders})"
+        
+        # 执行删除
+        db.execute_update(sql, (current_user["user_id"], *product_ids))
+        
+        return {
+            "code": 200,
+            "message": "批量删除成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"批量删除失败: {str(e)}"
         )
 
 @router.delete("/")

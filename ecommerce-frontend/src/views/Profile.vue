@@ -72,14 +72,7 @@
             <el-icon><Location /></el-icon>
             <span>收货地址</span>
           </el-menu-item>
-          <el-menu-item index="favorites" @click="activeMenu = 'favorites'">
-            <el-icon><Star /></el-icon>
-            <span>我的收藏</span>
-          </el-menu-item>
-          <el-menu-item index="coupons" @click="activeMenu = 'coupons'">
-            <el-icon><Discount /></el-icon>
-            <span>优惠券</span>
-          </el-menu-item>
+
           <el-menu-item index="security" @click="activeMenu = 'security'">
             <el-icon><Lock /></el-icon>
             <span>账户安全</span>
@@ -193,80 +186,7 @@
   </div>
 </div>
 
-        <!-- 我的收藏 -->
-        <div v-else-if="activeMenu === 'favorites'" class="tab-content">
-          <div class="tab-header">
-            <h3>我的收藏</h3>
-            <el-button :disabled="selectedFavorites.length === 0" @click="batchRemoveFavorite">
-              批量删除
-            </el-button>
-          </div>
-          <div class="favorites-list">
-            <el-checkbox-group v-model="selectedFavorites" class="favorites-grid">
-              <div v-for="item in favorites" :key="item.favorite_id" class="favorite-item">
-                <el-checkbox :label="item.favorite_id" class="favorite-checkbox" />
-                <el-card class="product-card" @click="$router.push(`/product/${item.product_id}`)">
-                  <img :src="item.image_url" alt="" class="product-image">
-                  <div class="product-info">
-                    <h4 class="product-name">{{ item.product_name }}</h4>
-                    <div class="product-price">
-                      <span class="current-price">¥{{ item.price.toFixed(2) }}</span>
-                      <span class="original-price" v-if="item.original_price">
-                        ¥{{ item.original_price.toFixed(2) }}
-                      </span>
-                    </div>
-                    <div class="product-meta">
-                      <span class="sales">销量 {{ item.sold_quantity || 0 }}</span>
-                      <span class="stock">库存 {{ item.stock_quantity || 0 }}</span>
-                    </div>
-                  </div>
-                  <div class="product-actions">
-                    <el-button type="primary" size="small" @click.stop="addToCart(item)">加入购物车</el-button>
-                    <el-button type="text" @click.stop="removeFavorite(item)" style="color: #f56c6c">
-                      取消收藏
-                    </el-button>
-                  </div>
-                </el-card>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
 
-        <!-- 优惠券 -->
-        <div v-else-if="activeMenu === 'coupons'" class="tab-content">
-          <div class="tab-header">
-            <h3>我的优惠券</h3>
-            <el-button type="primary" @click="goToCouponCenter">领券中心</el-button>
-          </div>
-          <el-tabs v-model="couponTab" class="coupon-tabs">
-            <el-tab-pane label="可用优惠券" name="available">
-              <div class="coupon-list">
-                <el-card v-for="coupon in availableCoupons" :key="coupon.id" class="coupon-card usable">
-                  <div class="coupon-content">
-                    <div class="coupon-amount">
-                      <span class="amount">¥{{ coupon.amount }}</span>
-                      <span class="type">{{ coupon.type }}</span>
-                    </div>
-                    <div class="coupon-info">
-                      <h4>{{ coupon.name }}</h4>
-                      <p class="condition">满{{ coupon.min_amount }}元可用</p>
-                      <p class="validity">有效期至{{ formatDate(coupon.end_time) }}</p>
-                    </div>
-                    <div class="coupon-actions">
-                      <el-button type="primary" size="small" @click="useCoupon(coupon)">立即使用</el-button>
-                    </div>
-                  </div>
-                </el-card>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="已使用" name="used">
-              <el-empty description="暂无已使用优惠券" v-if="usedCoupons.length === 0" />
-            </el-tab-pane>
-            <el-tab-pane label="已过期" name="expired">
-              <el-empty description="暂无已过期优惠券" v-if="expiredCoupons.length === 0" />
-            </el-tab-pane>
-          </el-tabs>
-        </div>
 
         <!-- 账户安全 -->
         <div v-else-if="activeMenu === 'security'" class="tab-content">
@@ -296,18 +216,7 @@
                 {{ userInfo.phone ? '更换' : '绑定' }}
               </el-button>
             </div>
-            <div class="security-item">
-              <div class="security-info">
-                <el-icon class="security-icon"><Message /></el-icon>
-                <div>
-                  <h4>绑定邮箱</h4>
-                  <p>已绑定邮箱：{{ userInfo.email || '未绑定' }}</p>
-                </div>
-              </div>
-              <el-button type="text" @click="showEmailDialog = true">
-                {{ userInfo.email ? '更换' : '绑定' }}
-              </el-button>
-            </div>
+
           </el-card>
         </div>
 
@@ -402,8 +311,8 @@ import { useUserStore } from '@/stores/user'
 import { useCartStore } from '@/stores/cart'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Tickets, Location, Star, Discount, Lock, Setting,
-  SwitchButton, User, Phone, Message
+  Tickets, Location, Lock, Setting,
+  SwitchButton, User, Phone
 } from '@element-plus/icons-vue'
 import AddressForm from '@/components/AddressForm.vue'
 import PasswordForm from '@/components/PasswordForm.vue'
@@ -418,11 +327,9 @@ const cartStore = useCartStore()
 // 状态管理
 const activeMenu = ref('orders')
 const orderTab = ref('recent')
-const couponTab = ref('available')
 const showRecharge = ref(false)
 const showAddressDialog = ref(false)
 const showPasswordDialog = ref(false)
-const selectedFavorites = ref([])
 const editingAddress = ref(null)
 
 // 🔧 新增：加载状态
@@ -821,36 +728,9 @@ const addToCart = (product) => {
   ElMessage.success('已加入购物车')
 }
 
-const removeFavorite = (item) => {
-  const index = favorites.value.findIndex(f => f.favorite_id === item.favorite_id)
-  if (index !== -1) {
-    favorites.value.splice(index, 1)
-    ElMessage.success('已取消收藏')
-  }
-}
-
-const batchRemoveFavorite = () => {
-  if (selectedFavorites.value.length === 0) return
-  
-  ElMessageBox.confirm(`确定要删除选中的${selectedFavorites.value.length}个收藏吗？`, '批量删除', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    type: 'warning'
-  }).then(() => {
-    favorites.value = favorites.value.filter(f => !selectedFavorites.value.includes(f.favorite_id))
-    selectedFavorites.value = []
-    ElMessage.success('批量删除成功')
-  })
-}
-
 const goToCouponCenter = () => {
   ElMessage.info('跳转到领券中心')
   // router.push('/coupons')
-}
-
-const useCoupon = (coupon) => {
-  ElMessage.success(`使用优惠券：${coupon.name}`)
-  // 实际应调用API
 }
 
 const confirmRecharge = () => {
@@ -859,9 +739,22 @@ const confirmRecharge = () => {
   showRecharge.value = false
 }
 
-const handleChangePassword = (passwordData) => {
-  ElMessage.success('密码修改成功')
-  showPasswordDialog.value = false
+const handleChangePassword = async (passwordData) => {
+  try {
+    // 调用后端API来修改密码
+    console.log('修改密码数据:', passwordData)
+    const response = await userApi.changePassword({
+      currentPassword: passwordData.currentPassword,
+      newPassword: passwordData.newPassword
+    })
+    console.log('密码修改成功:', response)
+    ElMessage.success('密码修改成功')
+  } catch (error) {
+    console.error('修改密码失败:', error)
+    ElMessage.error('修改密码失败: ' + (error.response?.data?.detail || error.message || '网络错误'))
+  } finally {
+    showPasswordDialog.value = false
+  }
 }
 
 onMounted(() => {
